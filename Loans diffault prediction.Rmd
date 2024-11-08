@@ -1,0 +1,2184 @@
+---
+title: "Loans Default Prediction - Give me credit"
+author: "kossi olivier ADANOU & Karima BOUSSAA"
+date: "2023-01-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+knitr::include_graphics("C:/Users/dell/Pictures/Screenshots/Capture d'écran_20230228_010831.png")
+```
+
+
+# PART 1 :PRELIMINARY
+## 1.1 Work Directory (Path)
+```{r}
+setwd("C:/Users/dell/Desktop/M2IFM/S1M2/Multivariate analysis/EXAM/travaaux_R")
+```
+
+## 1.2.Basic programming and data visualization Packages
+install.packages("readxl")
+install.packages("tidyverse")
+install.packages("gridExtra")
+install.packages("lmtest")
+install.packages("sandwich")
+install.packages("ggpubr")
+install.packages("Cairo")
+install.packages("MAP")
+install.packages("stargazer")
+
+install.packages("fitdistrplus")
+install.packages("logspline")
+install.packages("corrplot")
+install.packages("psych")
+install.packages("nortest")
+install.packages('xgboost')      #XGBoost
+install.packages('readr')        #fast and friendly way to read rectangular data 
+install.packages('stringr')      # Character manipulation: these functions allow you
+install.packages('caret')        #to streamline the model training process for 
+install.packages('car')          #Applied regression
+install.packages('ggplot2')      #Elegant data viz 
+install.packages('ggthemes')     #Extra theme
+
+install.packages('scales')       #Scale function 
+install.packages('dplyr')        #Gramar data manip 
+install.packages('mice')         #Multivariate Imputation by Chained Equation
+install.packages('randomForest') #Random forest
+install.packages('corrplot')     # correlation plot 
+install.packages('knitr')        #Dynamic report
+install.packages('Amelia')       #missmap
+install.packages('ROCR')         #Performance
+install.packages('psych')        #Research 
+
+install.packages('magrittr')     #Forward pipe
+install.packages('lattice')      #Trellis Graphics
+install.packages('ROSE')         #Random Over Sampling Examples
+install.packages('cvAUC')        #CrossValidated Area
+install.packages('Ckmeans.1d.dp')#Fast clustering
+install.packages("gmodels")
+install.packages("questionr")
+install.packages('effects')
+install.packages("webr")
+install.packages("reshape2")
+install.packages("rgl")
+install.packages("DiagrammeR")
+install.packages('naivebayes', dependencies=TRUE, repos='http://cran.rstudio.com/')
+
+## 1.3.Basic programming and data visualization Libraries 
+#library(readxl)
+
+```{r}
+library(tidyverse)
+library(gridExtra)
+library(lmtest)
+library(sandwich)
+library(car)
+library(Amelia)
+library(ggplot2)
+library(ggpubr)
+library(Cairo)
+library(MAP)
+
+library(stargazer)
+library(fitdistrplus)
+library(logspline)
+library(corrplot)
+library(psych)
+library(nortest)
+library('xgboost') 
+library('readr') 
+library('stringr') 
+library('caret') 
+library('car')
+library('ggplot2')
+library('ggthemes') 
+library('scales')  
+library('dplyr') 
+library('mice') 
+
+library('randomForest') 
+library('corrplot') 
+library('knitr') 
+library('Amelia')
+library('ROCR') 
+library('psych') 
+library('magrittr') 
+library('lattice') 
+library('ROSE') 
+library('cvAUC')
+library('Ckmeans.1d.dp')
+library(questionr)
+library(gmodels)
+library('rgl') 
+library('DiagrammeR') 
+library("tinytex")
+```
+
+
+## 1.4.  Download & check data
+### 1.4.1 : Importing Data Dictionary 
+Here we import Data
+```{r}
+library(readxl)
+DataDico<- read_excel("C:/Users/dell/Desktop/M2IFM/S1M2/Multivariate analysis/EXAM/travaaux_R/Data_Dictionary.xls")
+
+```
+
+### 1.4.2 : Importing Test Data 
+```{r}
+testDATA <- read.csv2("cs-test.csv")
+```
+
+### 1.4.3 :Importing training Data
+
+```{r}
+trainDATA <- read.csv2("cs-training.csv")
+```
+### 1.4.4 :Importing testresponse Data
+```{r}
+testresponse <- read.csv2("cs-test.response.csv")
+```
+
+```{r}
+#suppresion des colonnes "ID" SeriousDlqin2yrs dans la base testDATA
+testDATA_bis<- testDATA[,-c(0:2)]
+View(testDATA_bis)
+```
+
+```{r}
+# response on testDATA
+testresponse["SeriousDlqin2yrs"]<-ifelse(testresponse$Probability>0.5,1,0)
+View(testresponse)
+# We Delete Probability
+testresponse_bis<- testresponse[,-2]
+View(testresponse_bis)
+```
+
+###################################################################################
+# PART 2 : Exploratory Data Analysis
+
+## 2.1.Data Manipulation 
+For statistical analyses, we combine the two data bases training and test data sets.
+```{r}
+# drop the row id column 
+train<-trainDATA
+# Combine data
+test<-cbind(testresponse_bis,testDATA_bis)
+```
+## 2.2.Data Description
+```{r}
+combin <-rbind(train,test)
+dim(combin)        #Base Dimenssion
+```
+
+```{r}
+names(combin)      #Variables Names
+```
+### 2.2 Clean the datasets
+
+##### Detect Missing Value on Data
+
+```{r}
+as.data.frame(
+  sapply(
+    combin,
+    function(x) sum(is.na(x)))) # training dataset
+```
+Missmap
+```{r}
+library(Amelia)
+missmap(combin, legend = TRUE, col = c("#EE00EE","#76EEC6"), main= "Missing values vs observed from ntest and ntrain",yaxt='n',margins = c(5, 4))
+
+```
+### 2.3 Missings values manipulation 
+
+```{r}
+# test data set 
+combin$DebtRatio[is.na(combin$DebtRatio)] <- median(combin$DebtRatio,na.rm=T)
+combin$NumberOfTime60.89DaysPastDueNotWorse[is.na(combin$NumberOfTime60.89DaysPastDueNotWorse)] <- median(combin$NumberOfTime60.89DaysPastDueNotWorse,na.rm=T)
+
+# Replace testset NumberOfDependents missings values by 0
+
+combin$NumberOfDependents[is.na(combin$NumberOfDependents)] <- 0
+
+# Replace missing value by Mean
+combin$MonthlyIncome[is.na(combin$MonthlyIncome)] <- median(combin$MonthlyIncome,na.rm=T)
+
+```
+
+
+```{r}
+missmap(combin, legend = TRUE, col = c("#EE00EE","#76EEC6"), main= "Missing values vs observed from cs-training(2)",yaxt='n',margins = c(5, 4))
+
+```
+
+```{r}
+tabledelinquency <-sort ( table ( combin $SeriousDlqin2yrs ), decreasing =TRUE)
+ tabledelinquency
+```
+
+
+## PART 3 : STATISTICAL ANALYSIS 
+```{r}
+str(combin)
+```
+##### Data pre-processing
+First, we should prepare the data so the class of the data fits the type of the data values. This can be done by factorizing the variable which values are qualitative, could be binary or a discrete factor like 0, 1, 2, 3, etc, this is commonly referred as dummy variable. 
+```{r}
+#Convert Chr variables to numeric
+combin$SeriousDlqin2yrs<-as.factor(combin$SeriousDlqin2yrs)
+combin$RevolvingUtilizationOfUnsecuredLines<-as.numeric(combin$RevolvingUtilizationOfUnsecuredLines)
+#combin$age <-as.numeric(combin$age)
+combin$DebtRatio <-as.numeric(combin$DebtRatio)
+#combin$NumberOfTime30.59DaysPastDueNotWorse <-as.numeric(combin$NumberOfTime30.59DaysPastDueNotWorse) 
+#combin$MonthlyIncome  <-as.numeric(combin$MonthlyIncome)
+#combin$NumberOfOpenCreditLinesAndLoans  <-as.numeric(combin$NumberOfOpenCreditLinesAndLoans)
+#combin$NumberOfTimes90DaysLate <-as.numeric(combin$NumberOfTimes90DaysLate)
+#combin$NumberRealEstateLoansOrLines <-as.numeric(combin$NumberRealEstateLoansOrLines)
+
+```
+
+### 3.1 :Descriptive statistic
+
+```{r}
+# rename database 
+combin1<-combin
+#STATS
+describeBy(combin1)
+```
+### 3.2 : Data Exploration and Visualization
+#### 3.2.1 : Distribution Analysis 
+Let's explore the data-set now.
+```{r}
+# Normal Distribution curve of RevolvingUtilizationOfUnsecuredLines #
+par(mfrow = c(2, 2))
+inst <- combin1$RevolvingUtilizationOfUnsecuredLines
+h<-hist(inst, breaks=10, col="seagreen", border = "yellow", 
+        xlab="RevolvingUtilizationOfUnsecuredLines",
+   main=paste("RUOfUnsecuredLines","of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$RevolvingUtilizationOfUnsecuredLines[combin1$RevolvingUtilizationOfUnsecuredLines<=1],main="RevolvingUtilizationOfUnsecuredLines",col="seagreen")
+qqline(combin1$RevolvingUtilizationOfUnsecuredLines,col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+
+# Normal Distribution curve of age #
+par(mfrow = c(2, 2))
+inst <- combin1$age
+h<-hist(inst, breaks=10, col="#2E8B57", border = "yellow", 
+        xlab="age[années]",
+   main=paste("Ages of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$age, main = "Age",col="seagreen")
+qqline(combin1$age,col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+
+# Normal Distribution curve of NumberOfTime30.59DaysPastDueNotWorse #
+par(mfrow = c(2, 2))
+inst <- combin1$NumberOfTime30.59DaysPastDueNotWorse
+h<-hist(inst, breaks=10, col="#2E8B57", border = "yellow", 
+        xlab="NumberOfTime30.59DaysPastDueNotWorse",
+   main=paste("N30.59DaysPastDue of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$NumberOfTime30.59DaysPastDueNotWorse,
+       main = "NumberOfTime30.59DaysPastDueNotWorse",col="seagreen")
+qqline(combin1$NumberOfTime30.59DaysPastDueNotWorse, col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+```
+```{r}
+# Normal Distribution curve of DebtRatio #
+par(mfrow = c(2, 2))
+inst <- combin1$DebtRatio
+h<-hist(inst, breaks=10, col="#2E8B57", border = "yellow", 
+        xlab="DebtRatio",
+   main=paste("DebtRatio of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$DebtRatio,
+       main = "DebtRatio",col="seagreen")
+qqline(combin1$DebtRatio, col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+
+# Normal Distribution curve of MonthlyIncome #
+par(mfrow = c(2, 2))
+inst <- combin1$MonthlyIncome
+h<-hist(inst, breaks=10, col="#2E8B57", border = "yellow", 
+        xlab="MonthlyIncome",
+   main=paste("MonthlyIncome of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$MonthlyIncome,
+       main = "MonthlyIncome",col="seagreen")
+qqline(combin1$MonthlyIncome, col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+
+# Normal Distribution curve of NumberOfDependents#
+par(mfrow = c(2, 2))
+inst <- combin1$NumberOfDependents
+h<-hist(inst, breaks=10, col="#2E8B57", border = "yellow", 
+        xlab="NumberOfDependents",
+   main=paste("NumberOfDependents of", nrow(combin1), "borrowers"))
+xfit<-seq(min(inst),max(inst),length=40)
+yfit<-dnorm(xfit,mean=mean(inst),sd=sd(inst))
+yfit <- yfit*diff(h$mids[1:2])*length(inst)
+lines(xfit, yfit, col="red", lwd=2)
+
+qqnorm(combin1$NumberOfDependents,
+       main = "NumberOfDependents",col="seagreen")
+qqline(combin1$NumberOfDependents, col = "red",lty = 1, lwd = 3)
+legend("topleft", legend = c("Linear line","Var distribution"), 
+      col = c("red", "seagreen"), lty = 1:3, cex = 0.8)
+```
+#### 3.2.2 : Outlier Analysis 
+```{r}
+par(mfrow = c(5, 2))
+
+ggplot(combin1,aes(x = 1, y = RevolvingUtilizationOfUnsecuredLines ),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FFE1FF", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = age),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FFE7BA", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberOfTime30.59DaysPastDueNotWorse),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#C6E2FF", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = DebtRatio),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FFBBFF", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = MonthlyIncome),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#BBFFFF", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberOfOpenCreditLinesAndLoans),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FFEC8B", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberOfTimes90DaysLate),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FFFFF0", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberRealEstateLoansOrLines),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FF6A6A", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberOfTime60.89DaysPastDueNotWorse),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#CAFF70", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+
+ggplot(combin1,aes(x = 1, y = NumberOfDependents),main = "Identification of Outliers")+ 
+  geom_boxplot(fill = "#FF7F24", colour = "#D02090",outlier.colour = "red", outlier.shape = 1) 
+```
+**MonthlyIncome** & **DebtRatio** clearly have outliers. During data visualization other outliers like **RevolvingUtilizationOfUnsecuredLines, NumberOfOpenCreditLinesAndLoans** and **NumberRealEstateLoansOrLines** were also identified. Outliers can be identified and replaced using percentile method as well. That is what we do in next section.
+
+
+##### 3.2.3 Numerical features normalization
+
+Before starting modeling process, we need to apply on all numeric variables z-score normalization 
+(from each feature value we subtract mean and the result is divided by standard deviation). 
+We will use function **scale** for this purpose.
+
+```{r Z-score normalisation, echo=TRUE, results='hide'}
+# z-score normalisation of numeric variables
+combin1 %>% mutate_if(is.numeric, scale)
+```
+ *We use results='hide' in code chunk to hide the output while the code still runs
+that is why The transformed data is not printed in this report, given the size of the data-set*
+
+
+###  3.3 : Univariate Analysis 
+```{r}
+trainpara1 <- combin1[1:150000,]
+testpara1 <- combin1[150001:251503,]
+#for final results 
+letest<-testpara1
+```
+
+```{r}
+#Convert Chr variables to numeric
+trainpara1$SeriousDlqin2yrs<-as.factor(trainpara1$SeriousDlqin2yrs)
+trainpara1$RevolvingUtilizationOfUnsecuredLines<-as.numeric(trainpara1$RevolvingUtilizationOfUnsecuredLines)
+#combin$age <-as.numeric(combin$age)
+trainpara1$DebtRatio <-as.numeric(trainpara1$DebtRatio)
+```
+
+#### 3.2.1 : SeriousDlqin2yrs 
+```{r}
+trainpara1$SeriousDlqin2yrs <- factor(trainpara1$SeriousDlqin2yrs,
+                                           levels = c(0,1),
+                                           labels = c("Nodelinquency","Delinquency"))
+## level Mode
+ tabledelinquency <-sort ( table ( trainpara1 $ SeriousDlqin2yrs ), decreasing =TRUE)
+ tabledelinquency
+```
+```{r}
+ggplot(trainpara1, 
+       aes(x=SeriousDlqin2yrs)) + 
+  geom_bar(color="yellow",fill = "#2E8B57")+ 
+    geom_text(aes(y = ..count.. -50,label = paste0(round(prop.table(..count..),02) * 100, '%')), 
+              stat = 'count', position = position_stack(vjust=0.5), size = 6,color= "yellow") +
+    labs(title="Delinquency Status Of borrowers", x="Deliquency status") 
+```
+#### 3.2.2 : RevolvingUtilizationOfUnsecuredLines 
+```{r}
+# replace the abnormal values with median
+
+trainpara1$RevolvingUtilizationOfUnsecuredLines[trainpara1$RevolvingUtilizationOfUnsecuredLines>1]=0.15
+
+ggplot(data = trainpara1,aes(RevolvingUtilizationOfUnsecuredLines))+geom_histogram(col='yellow',fill='seagreen')+
+  labs(title='Histogram of RevolvingUtilizationOfUnsecuredLines')
+ggplot(trainpara1,aes(xxx = 1, y = RevolvingUtilizationOfUnsecuredLines))+geom_boxplot(fill = "yellow", colour = "seagreen") # New Boxplot
+```
+
+#### 3.2.3 : age
+age is normaly distributed 
+```{r}
+# boxplot
+ggplot(trainpara1,aes(x = 1, y = age))+geom_boxplot(fill = "yellow", colour = "#00E5EE",outlier.colour = "red", outlier.shape = 1)#+ geom_jitter(width = 0.2) # New Boxplot
+
+# divided age into classes
+trainpara1$ageClass[trainpara1$age > 0 & trainpara1$age <= 40] <- "0-40"
+trainpara1$ageClass[trainpara1$age > 40 & trainpara1$age <=52] <- "41-52"
+trainpara1$ageClass[trainpara1$age > 52 & trainpara1$age <=64] <- "53-64"
+trainpara1$ageClass[trainpara1$age > 64 ] <- "64+"
+trainpara1$ageClass <- as.factor(trainpara1$ageClass)
+#  Univariate Graphics
+ ggplot(trainpara1,aes(as.factor(ageClass), fill=as.factor(ageClass)))+
+        geom_bar(position = "dodge") 
+```
+
+```{r}
+library("ggpubr")
+ggboxplot(trainpara1, x = "SeriousDlqin2yrs", y = "age", 
+          color = "SeriousDlqin2yrs", palette = c("#00AFBB", "#E7B800"),
+          ylab = "age", xlab = "Groups")
+```
+
+
+#### 3.2.4 : NumberOfTime30.59DaysPastDueNotWorse
+
+```{r}
+#Table observation
+table(trainpara1$NumberOfTime30.59DaysPastDueNotWorse)
+```
+By observing the table, we noticed few people with 96 and 98 times. That is quite absurd. We choose replace them by 0.
+```{r}
+# we replace value above 96 by 0
+trainpara1$NumberOfTime30.59DaysPastDueNotWorse[trainpara1$NumberOfTime30.59DaysPastDueNotWorse>=96]<-0
+
+# divided variable into classes
+trainpara1$N30.59Days[trainpara1$NumberOfTime30.59DaysPastDueNotWorse ==0] <- "None"
+trainpara1$N30.59Days[trainpara1$NumberOfTime30.59DaysPastDueNotWorse ==1] <- "Onetime"
+trainpara1$N30.59Days[trainpara1$NumberOfTime30.59DaysPastDueNotWorse > 1] <- "Overonetime"
+trainpara1$N30.59Days <- as.factor(trainpara1$N30.59Days)
+
+# Graphics
+ggplot(trainpara1,aes(as.factor(N30.59Days), fill=as.factor(N30.59Days)))+
+        geom_bar(position = "dodge") 
+```
+#### 3.2.5 : DebtRatio
+```{r}
+boxplot(trainpara1$DebtRatio,col='yellow')
+
+```
+ with this boxplot, we remark that borrowers with debt ratio greater than 100k seems weird. we remove them to simplify our study.
+
+```{r}
+# Here we remove them 
+#Replace by median
+trainpara1$Debtraciio<-ifelse(trainpara1$DebtRatio<0,median(trainpara1$DebtRatio),trainpara1$DebtRatio)
+trainpara1$Debtracio<-ifelse(trainpara1$DebtRatio>1,median(trainpara1$DebtRatio),trainpara1$DebtRatio)
+
+#Boxplot
+split.screen(1:2)
+screen(1) ; boxplot(trainpara1$DebtRatio,col='yellow')
+screen(2) ;boxplot(trainpara1$Debtracio, notch=TRUE, col="gold",main="Debt ratio")
+```
+```{r}
+# Classes for univariate analysis 
+
+trainpara1$DebtRatioClass[trainpara1$Debtracio > 0 & trainpara1$Debtracio <= 0.25]<- '0-0.25'
+trainpara1$DebtRatioClass[trainpara1$Debtracio > 0.25   & trainpara1$Debtracio <= 0.5]   <- '0.25-0.5'
+trainpara1$DebtRatioClass[trainpara1$Debtracio > 0.5   & trainpara1$Debtracio <= 0.75]  <- '0.5-0.75'
+trainpara1$DebtRatioClass[trainpara1$Debtracio > 0.75  & trainpara1$Debtracio <= 1] <- '0.75-1'
+
+#trainpara1$DebtRatioClass <- as.factor(trainpara1$DebtRatioClass)
+# Graphics
+ggplot(trainpara1,aes(as.factor(DebtRatioClass), fill=as.factor(DebtRatioClass)))+
+        geom_bar(position = "dodge")
+```
+
+#### 3.2.6 : MonthlyIncome
+```{r}
+ggboxplot(trainpara1, x = "SeriousDlqin2yrs", y = "MonthlyIncome", 
+          color = "SeriousDlqin2yrs", palette = c("#00AFBB", "#E7B800"),
+          ylab = "MonthlyIncome", xlab = "Groups")
+
+# Handling missing values outliers
+trainpara1$MonthlyIncome[is.na(trainpara1$MonthlyIncome)]<-median(trainpara1$MonthlyIncome,na.rm = TRUE)
+trainpara1$MonthlyIncome[(trainpara1$MonthlyIncome)>300000]<-median(trainpara1$MonthlyIncome,na.rm = TRUE)
+
+# Classes 
+trainpara1$IncomeClass[trainpara1$MonthlyIncome >= 0 & trainpara1$MonthlyIncome <= 1000] <- '0-1000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 1000 & trainpara1$MonthlyIncome <= 2000] <- '1001-2000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 2000 & trainpara1$MonthlyIncome <= 3000] <- '2001-3000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 3000 & trainpara1$MonthlyIncome <= 4000] <- '3001-4000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 4000 & trainpara1$MonthlyIncome <= 6000] <- '4001-6000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 6000 & trainpara1$MonthlyIncome <= 8000] <- '6001-8000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 8000 & trainpara1$MonthlyIncome <= 10000] <- '8001-10000'
+trainpara1$IncomeClass[trainpara1$MonthlyIncome > 10000] <- '>20000'
+
+# Graphics
+ggplot(trainpara1,aes(as.factor(IncomeClass), fill=as.factor(IncomeClass)))+
+        geom_bar(position = "dodge")
+```
+#### 3.2.7 : NumberOfOpenCreditLinesAndLoans
+```{r}
+# replace by median 
+trainpara1$NumberOfOpenCreditLinesAndLoans<-ifelse(trainpara1$NumberOfOpenCreditLinesAndLoans>15,median(trainpara1$NumberOfOpenCreditLinesAndLoans),trainpara1$NumberOfOpenCreditLinesAndLoans)
+
+ggplot(trainpara1,aes(x = 1, y = NumberOfOpenCreditLinesAndLoans))+geom_boxplot(fill = "#00FA9A", colour = "#104E8B",outlier.colour = "red", outlier.shape = 1)#+ geom_jitter(width = 0.2) # New Boxplot
+# seems like this variable needs no imputations
+```
+
+#### 3.2.9 : NumberRealEstateLoansOrLines
+```{r}
+table(trainpara1$NumberRealEstateLoansOrLines)
+```
+```{r}
+trainpara1$NumLoansOrLines[trainpara1$NumberRealEstateLoansOrLines == 0] <- "None"
+trainpara1$NumLoansOrLines[trainpara1$NumberRealEstateLoansOrLines == 1 ] <- "onetime"
+trainpara1$NumLoansOrLines[trainpara1$NumberRealEstateLoansOrLines == 2 ] <- "twotime"
+trainpara1$NumLoansOrLines[trainpara1$NumberRealEstateLoansOrLines > 2 ] <- "Severaltime"
+trainpara1$NumLoansOrLines <- as.factor(trainpara1$NumLoansOrLines)
+
+ggplot(trainpara1,aes(as.factor(NumLoansOrLines), fill=as.factor(NumLoansOrLines)))+
+        geom_bar(position = "dodge")+
+  scale_fill_brewer(palette="Oranges")
+```
+#### 3.2.10 : NumberOfTime60.89DaysPastDueNotWorse 
+```{r}
+# same as above push the absurd values to zero 
+trainpara1$NumberOfTime60.89DaysPastDueNotWorse[trainpara1$NumberOfTime60.89DaysPastDueNotWorse>90]<-0
+
+ggplot(data = trainpara1,aes(NumberOfTime60.89DaysPastDueNotWorse))+geom_histogram(col='yellow',fill='seagreen')+
+  labs(title='Histogram of num of times 60-89 days')
+```
+```{r}
+trainpara1$NumTime60.89D_due[trainpara1$NumberOfTime60.89DaysPastDueNotWorse == 0] <- "Never"
+trainpara1$NumTime60.89D_due[trainpara1$NumberOfTime60.89DaysPastDueNotWorse == 1 ] <- "onetime"
+trainpara1$NumTime60.89D_due[trainpara1$NumberOfTime60.89DaysPastDueNotWorse == 2 ] <- "twotime"
+trainpara1$NumTime60.89D_due[trainpara1$NumberOfTime60.89DaysPastDueNotWorse > 2 ] <- "Severaltime"
+trainpara1$NumTime60.89D_due <- as.factor(trainpara1$NumTime60.89D_due)
+
+# little stats 
+(table(trainpara1$NumTime60.89D_due))
+values <- c(142665, 5731 ,1118 , 486 )
+prop.table(values)
+```
+
+```{r}
+# Graph
+library(ggpubr)
+df <- data.frame(
+ group = c("Never","onetime","twotime","Severaltime"),
+  value = c(95, 4, 0.7,0.3))
+
+# Change the position and font color of labels
+ggdonutchart(df, "value",
+   lab.pos = "in", lab.font = "white",
+   fill = "group", color = "yellow",
+   palette = c("#00AFBB", "#E7B800", "#FC4E07","#836FFF"))
+
+```
+
+
+
+#### 3.2.11 : NumberOfDependents 
+```{r}
+trainpara1$NumberOfDependents[is.na(trainpara1$NumberOfDependents)]<-0
+# divided age into classes
+trainpara1$NumOfDepen[trainpara1$NumberOfDependents == 0] <- "Sansenfants"
+trainpara1$NumOfDepen[trainpara1$NumberOfDependents >= 1 & trainpara1$NumberOfDependents <=2] <- "1-2 Enf"
+trainpara1$NumOfDepen[trainpara1$NumberOfDependents > 2 & trainpara1$NumberOfDependents <=5] <- "3-5 Enf"
+trainpara1$NumOfDepen[trainpara1$NumberOfDependents > 5 ] <- ">5 Enf"
+trainpara1$NumOfDepen <- as.factor(trainpara1$NumOfDepen)
+
+table(trainpara1$NumOfDepen)
+```
+```{r}
+Family_Member <- c("Alone","1-2 Menbers","3-5 Menbers",">5 Menbers")
+values <- c(90825, 45838 ,13091, 245 )
+Member_prop<-c(60, 30, 9,1)
+  
+top <- data.frame(Family_Member,Member_prop)
+
+ggplot(top, aes(x = "", y = Member_prop, fill = Family_Member)) +
+  geom_col(color = "yellow") +
+  geom_label(aes(label = Member_prop),
+             color = "white",
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE) +
+  coord_polar(theta = "y")
+  
+```
+
+###  3.3   : Bivariate Analysis 
+
+```{r}
+# rename table
+trainpara2<-trainpara1
+```
+
+#### 3.3.1 : age variable x SeriousDlqin2yrs(delinquency)
+```{r}
+#Statistic table
+table_eff <- table(trainpara2$ageClass,trainpara2$SeriousDlqin2yrs ) # Un tableau croisé avec les effectifs
+table_prop <- (prop.table(table_eff, 2)*100)
+khi2 <- chisq.test(table_eff) # Le khi2 est calculé et stocké dans un nouvel objet "khi2"
+```
+
+```{r}
+#Statistic table to dataframe
+df_table_eff <- as.data.frame(addmargins(table_eff,1))
+df_table_prop <- as.data.frame(addmargins(table_prop,1))
+```
+
+```{r}
+split.screen(1:2)
+# table
+age_crosstable_prop <- ggplot(df_table_prop, aes(Var2, Var1)) +
+  geom_tile(aes(fill = Freq)) +
+  scale_fill_distiller(direction = 2) + # Permet d'inverser le sens du gradient de couleur
+  geom_tile(data = as.data.frame(table_prop), colour = "yellow", fill = NA,lty = 1, lwd = 1) + # Cette ligne pour ajouter des bordures blanches entre les cellules
+  geom_text(aes(label = paste(round(Freq, digits = 1), "%") ),
+            size = 4.5)
+age_crosstable_prop 
+```
+
+
+```{r}
+survey <- data.frame(group=rep(c("Delinquency", "NoDelinquency"),each=4),
+                     AGE=rep(c("0-40", "41-52", "53-64", "64+"),2),
+                     Borrowers=c(22.5, 27.7, 28.1, 21.7, 36.2, 34.3, 21.6, 7.8))
+
+# Create a grouped bar graph
+ggplot(survey, aes(x=AGE, y=Borrowers, fill=group)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values=c("#EEC900","#00008B"))+
+  geom_text(aes(label=Borrowers), vjust=3, colour="#FF1493", size=5)
+
+```
+
+#### 3.3.2 : DebtRatio variable x SeriousDlqin2yrs(delenquency)
+```{r}
+# graphics of DebtRatioClass&SeriousDlqin2yrs
+table_eff <- table(trainpara2$SeriousDlqin2yrs,  trainpara2$DebtRatioClass ) # Un tableau croisé avec les effectifs
+table_prop <- (prop.table(table_eff, 1)*100)
+
+df_table_eff <- as.data.frame(addmargins(table_eff,2))
+df_table_prop <- as.data.frame(addmargins(table_prop,2))
+
+debtratio_crosstable_prop <- ggplot(df_table_prop, aes(Var2, Var1)) +
+  geom_tile(aes(fill = Freq)) +
+  scale_fill_distiller(direction = 1) + # Permet d'inverser le sens du gradient de couleur
+  geom_tile(data = as.data.frame(table_prop), colour = "yellow", fill = NA,lty = 1, lwd = 1) +  
+  geom_text(aes(label = paste(round(Freq, digits = 1), "%") ),
+            size = 4.5)
+
+debtratio_crosstable_prop
+```
+
+```{r}
+survey <- data.frame(group=rep(c("Delinquency", "NoDelinquency"),each=4),
+                     DebtRatio=rep(c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"),2),
+                     Borrowers=c(33.4, 52.6, 10.5, 3.5, 28.8, 49.8, 15.3, 6.2))
+
+# Create a grouped bar graph
+ggplot(survey, aes(x=DebtRatio, y=Borrowers, fill=group)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values=c("#27408B","#6A5ACD"))+
+  geom_text(aes(label=Borrowers), vjust=1, colour="#FFD700", size=5)
+
+```
+
+#### 3.3.3 : MonthlyIncome variable x SeriousDlqin2yrs(delenquency)
+Distribution of MonthlyIncome variable based on SeriousDlqin2yrs(delinquency).
+```{r}
+ggplot(data=trainpara2, aes(x=SeriousDlqin2yrs, 
+                                        y=MonthlyIncome,
+                                        color = SeriousDlqin2yrs)) + 
+    scale_y_continuous(breaks = c(25000,50000,75000,100000),
+                       labels = c("25000","50000","75000","100000"),
+                       limits = c(25000,75000))+
+    geom_boxplot(alpha=.3) + 
+    geom_jitter(alpha = 0.3,
+                color = "blue", 
+                width = 0.2) + 
+    labs(title="Deliquency based on MonthlyIncome", 
+         x="Delinquency", y="MonthlyIncome")
+```
+
+
+```{r}
+# graphics of IncomeClass&SeriousDlqin2yrs
+table_eff <- table(trainpara2$SeriousDlqin2yrs,  trainpara2$IncomeClass ) # Un tableau croisé avec les effectifs
+table_prop <- (prop.table(table_eff, 1)*100)
+
+df_table_eff <- as.data.frame(addmargins(table_eff,2))
+df_table_prop <- as.data.frame(addmargins(table_prop,2))
+
+income_crosstable_prop <- ggplot(df_table_prop, aes(Var2, Var1)) +
+  geom_tile(aes(fill = Freq)) +
+  scale_fill_distiller(direction = 1) + # Permet d'inverser le sens du gradient de couleur
+  geom_tile(data = as.data.frame(table_prop), colour = "yellow", fill = NA,lty = 1, lwd = 1) +  
+  geom_text(aes(label = paste(round(Freq, digits = 1), "%") ),
+            size = 4.5)
+#
+income_crosstable_prop
+```
+
+
+```{r}
+survey1 <- data.frame(status=rep(c("Delinquency", "NoDelinquency"),each=8),
+                     Income=rep(c("0-1000", "1001-2000", "2001-3000", "3001-4000", "4001-6000","6001-8000","8001-10000",">20000"),2),
+                     Borrowers=c(12.5,3.2,4.6,8.4,10,39,13.3,8.9,7.9,2.5,7.7,12.6,13.5,37.6,11.7,6.6))
+
+# Building a table with the data for the plot
+PD = survey1 %>% group_by(status, Income) %>% summarise(n =  Borrowers)
+print(PD)
+```
+
+```{r}
+# Pie-Donut chart
+library(ggplot2)
+library(webr)
+library(dplyr)
+PieDonut(PD, aes(status, Income, count=n), title = "Delinquency status X Monthlyincome by class",
+         r0 = 0.4, r1 = 0.9,color = )
+
+
+```
+
+#### 3.2.6 : NumberOfOpenCreditLinesAndLoans x SeriousDlqin2yrs(delenquency)
+```{r}
+
+trainpara2$OpenCreditClass[trainpara2$NumberOfOpenCreditLinesAndLoans >= 0 & trainpara2$NumberOfOpenCreditLinesAndLoans<=5] <- '0-5'
+trainpara2$OpenCreditClass[trainpara2$NumberOfOpenCreditLinesAndLoans > 5 & trainpara2$NumberOfOpenCreditLinesAndLoans<=10] <- '5-10'
+trainpara2$OpenCreditClass[trainpara2$NumberOfOpenCreditLinesAndLoans > 10 & trainpara2$NumberOfOpenCreditLinesAndLoans<=15] <- '10-15'
+trainpara2$OpenCreditClass[trainpara2$NumberOfOpenCreditLinesAndLoans > 15 & trainpara2$NumberOfOpenCreditLinesAndLoans<= 20] <- '15-20'
+trainpara2$OpenCreditClass[trainpara2$NumberOfOpenCreditLinesAndLoans > 20] <-'20+'
+trainpara2$OpenCreditClass <- as.factor(trainpara2$OpenCreditClass)
+```
+
+```{r}
+# graphics of OpenCreditClass&SeriousDlqin2yrs
+table_eff <- table(trainpara2$SeriousDlqin2yrs,  trainpara2$OpenCreditClass ) # Un tableau croisé avec les effectifs
+table_prop <- (prop.table(table_eff, 1)*100)
+
+df_table_eff <- as.data.frame(addmargins(table_eff,2))
+df_table_prop <- as.data.frame(addmargins(table_prop,2))
+
+credit_crosstable_prop <- ggplot(df_table_prop, aes(Var2, Var1)) +
+  geom_tile(aes(fill = Freq)) +
+  scale_fill_distiller(direction = 1) + # Permet d'inverser le sens du gradient de couleur
+  geom_tile(data = as.data.frame(table_prop), colour = "yellow", fill = NA,lty = 1, lwd = 1) +  
+  geom_text(aes(label = paste(round(Freq, digits = 1), "%") ),
+            size = 4.5)
+#
+credit_crosstable_prop
+```
+```{r}
+ggplot(data=trainpara2, aes(x=OpenCreditClass, 
+                                        fill=SeriousDlqin2yrs)) +
+    geom_density(alpha=.3)+
+    labs(title="Delinquency based on NumberOfOpenCreditLinesAndLoans", 
+         x="NumberOfOpenCreditLinesAndLoans")
+```
+
+#### 3.2.4 : NumberRealEstateLoansOrLines x SeriousDlqin2yrs(delenquency)
+
+```{r}
+trainpara2$RLinesClass <- '3+' 
+trainpara2$RLinesClass[trainpara2$NumberRealEstateLoansOrLines >=0 & trainpara2$NumberRealEstateLoansOrLines <= 1] <- '0-1'
+trainpara2$RLinesClass[trainpara2$NumberRealEstateLoansOrLines >1 & trainpara2$NumberRealEstateLoansOrLines <= 2] <- '1-2'
+trainpara2$RLinesClass[trainpara2$NumberRealEstateLoansOrLines >2 & trainpara2$NumberRealEstateLoansOrLines <= 3] <- '2-3'
+trainpara2$RLinesClass[trainpara2$NumberRealEstateLoansOrLines > 3]<- '3+' 
+trainpara2$RLinesClass<- as.factor(trainpara2$RLinesClass)
+```
+
+
+```{r}
+# graphics of DebtRatioClass&SeriousDlqin2yrs
+table_eff <- table(trainpara2$SeriousDlqin2yrs,  trainpara2$RLinesClass ) # Un tableau croisé avec les effectifs
+table_prop <- (prop.table(table_eff, 1)*100)
+
+df_table_eff <- as.data.frame(addmargins(table_eff,2))
+df_table_prop <- as.data.frame(addmargins(table_prop,2))
+
+loans_crosstable_prop <- ggplot(df_table_prop, aes(Var2, Var1)) +
+  geom_tile(aes(fill = Freq)) +
+  scale_fill_distiller(direction = 1) + # Permet d'inverser le sens du gradient de couleur
+  geom_tile(data = as.data.frame(table_prop), colour = "yellow", fill = NA,lty = 1, lwd = 1) +  
+  geom_text(aes(label = paste(round(Freq, digits = 1), "%") ),
+            size = 4.5)
+#
+loans_crosstable_prop
+```
+```{r}
+survey2 <- data.frame(group=rep(c("Delinquency", "NoDelinquency"),each=4),
+                     RLinesClass=rep(c("0-1", "2", "3", ">3"),2),
+                     Borrowers=c(74, 17.6, 4.2, 4.2, 72.2, 21.3, 4.2, 2.3))
+
+# Create a grouped bar graph
+ggplot(survey2, aes(x=RLinesClass, y=Borrowers, fill=group)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values=c("#8B1C62","#7A378B"))+
+  geom_text(aes(label=Borrowers), vjust=1, colour="#242424", size=5)
+
+```
+
+
+#### 3.2.4 : NumberOfDependents x SeriousDlqin2yrs(delenquency)
+```{r}
+ggplot(trainpara2, aes( y=NumberOfDependents,x=SeriousDlqin2yrs, fill=SeriousDlqin2yrs, colour=SeriousDlqin2yrs))+
+        geom_boxplot(alpha=0.5)+
+        geom_jitter(width=0.25)
+```
+
+#### 3.4: Multivariate Analysis spearman correlation matrix 
+```{r}
+train_set  <- combin1[1:150000,]
+train_set$NumberOfDependents[is.na(train_set$NumberOfDependents)]<-0
+# drop the row id column in trainingdataset
+train_set$Id<-NULL
+train_set$MonthlyIncome[is.na(train_set$MonthlyIncome)] <- median(train_set$MonthlyIncome,na.rm=T)
+
+#Convert integer variables to numeric
+train_set$SeriousDlqin2yrs<-as.numeric(train_set$SeriousDlqin2yrs)
+train_set$RevolvingUtilizationOfUnsecuredLines<-as.numeric(train_set$RevolvingUtilizationOfUnsecuredLines)
+train_set$age <-as.numeric(train_set$age)
+train_set$NumberOfTime30.59DaysPastDueNotWorse <-as.numeric(train_set$NumberOfTime30.59DaysPastDueNotWorse) 
+train_set$MonthlyIncome  <-as.numeric(train_set$MonthlyIncome)
+train_set$NumberOfOpenCreditLinesAndLoans  <-as.numeric(train_set$NumberOfOpenCreditLinesAndLoans)
+train_set$NumberOfTimes90DaysLate <-as.numeric(train_set$NumberOfTimes90DaysLate)
+train_set$NumberRealEstateLoansOrLines <-as.numeric(train_set$NumberRealEstateLoansOrLines)
+train_set$DebtRatio <-as.numeric(train_set$DebtRatio)
+```
+
+```{r}
+
+names(train_set) <- c("Result","DefaultLine","Age","DelayBetween3059","DebtRatio","MonthlyIncome","NbLoanCredit","DelaySup90","NbRealEstateLoansLines","DelayBetween6089","NumberOfDependents")
+train_set_cor<-cor(train_set[,],method = "spearman")
+corrplot(train_set_cor)
+text(x=rep(1:ncol(train_set_cor),ncol(train_set_cor)), y=rep(1:ncol(train_set_cor),each=ncol(train_set_cor)),
+     label=sprintf("%0.2f", train_set_cor[,ncol(train_set_cor):1]), cex=0.5, xpd=TRUE)
+```
+
+###  3.5  groups mean & t-test analysis 
+####  3.5.1 SeriousDlqin2yrs & RevolvingUtilizationOfUnsecuredLines
+```{r}
+attach(trainpara1)
+ggplot(data=trainpara1, aes(SeriousDlqin2yrs,RevolvingUtilizationOfUnsecuredLines,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title = " Revolving Utilization Of Unsecured Lines by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#FF4500", "Delinquency" = "#2F4F4F"))
+t.test(RevolvingUtilizationOfUnsecuredLines~SeriousDlqin2yrs, var.equal=FALSE) # testing the means of the two groups
+```
+####  3.5.2 SeriousDlqin2yrs & age
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,age,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "Age by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#98FB98", "Delinquency" = "#FFDEAD"))
+t.test(age~SeriousDlqin2yrs, var.equal=FALSE)
+```
+
+####  3.5.3 SeriousDlqin2yrs & NumberOfTime30.59DaysPastDueNotWorse
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,NumberOfTime30.59DaysPastDueNotWorse,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "NumberOfTimes 30 -59 Days Past Due Not Worse by Serious Deliquency")+
+   scale_fill_manual("legend", values = c("Nodelinquency" = "#FFA500", "Delinquency" = "#FF1493"))
+t.test(NumberOfTime30.59DaysPastDueNotWorse~SeriousDlqin2yrs, var.equal=FALSE)
+```
+####  3.5.4 SeriousDlqin2yrs & DebtRatio
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,DebtRatio,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "Debt Ratio by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#1E90FF", "Delinquency" = "#262626"))
+t.test(DebtRatio~SeriousDlqin2yrs, var.equal=FALSE)
+```
+####  3.5.5 SeriousDlqin2yrs & MonthlyIncome
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,MonthlyIncome,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "Monthly Income by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#00CED1", "Delinquency" = "#8B4513"))
+t.test(MonthlyIncome~SeriousDlqin2yrs, var.equal=FALSE)
+```
+####  3.5.6 SeriousDlqin2yrs & NumberOfOpenCreditLinesAndLoans
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,NumberOfOpenCreditLinesAndLoans,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "Number Of Open Credit Lines And Loans by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#5D478B", "Delinquency" = "#8B795E"))
+t.test(NumberOfOpenCreditLinesAndLoans~SeriousDlqin2yrs, var.equal=FALSE)
+```
+####  3.5.7 SeriousDlqin2yrs & NumberOfDependents
+```{r}
+ggplot(trainpara1, aes(SeriousDlqin2yrs,NumberOfDependents,fill = SeriousDlqin2yrs)) +
+geom_bar(stat="identity", position=position_dodge()) + labs(title = "Number Of Dependents by Serious Deliquency")+
+  scale_fill_manual("legend", values = c("Nodelinquency" = "#FF0000", "Delinquency" = "#2E8B57"))
+t.test(NumberOfDependents~SeriousDlqin2yrs, var.equal=FALSE)
+```
+
+
+#######################################################################################
+## PART 4 : Model Development and Performance
+###################################################################################
+
+We define our databases training et test. 
+combin1 = trainning + test database 
+from combin1 we create trainpara01 wich will be divided into train and test. we just change databases names nothing else. It was not necessary but we don't have enough time to change it before deadline submission
+```{r}
+trainpara01 <- combin1# rename data set
+# Replace missing value by 0
+trainpara01$NumberOfDependents[is.na(trainpara01$NumberOfDependents)]<-0
+# drop the row id column in trainingdataset
+trainpara01$Id<-NULL
+#trainpara01<-trainpara01[,-(12:20)]
+
+#Missing data
+# Replace missing value by Mean
+trainpara01$MonthlyIncome[is.na(trainpara01$MonthlyIncome)] <- median(trainpara01$MonthlyIncome,na.rm=T)
+```
+
+### 4.2 : Machine Learning Method and  Machine Learning Algorithms
+
+#### 4.2.1 : Logistic Regression
+
+```{r}
+library(MASS) #Logistic Regression and LDA
+library(caret)#knn3 trainControl train
+#New data 
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+```
+#### Conditional Distributions of each variable
+```{r}
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+ntrain<-nDat[trainIndex,]
+ntest<-nDat[-trainIndex,]
+
+library(reshape2)
+
+# melting the data frame
+feature.names<-names(nDat)[-1]
+
+vizDat<- melt(nDat,id.vars = 'SeriousDlqin2yrs'
+              ,measure.vars = feature.names, variable.name = "Feature"
+              ,value.name = "Value")
+
+# here we give out conditional box plots for each feature on the response variable
+p <- ggplot(data = vizDat, aes(x=Feature, y=Value)) + 
+             geom_boxplot(aes(fill=SeriousDlqin2yrs))
+p <- p + facet_wrap( ~ Feature, scales="free")
+p + ggtitle("Conditional Distributions of each variable")
+```
+
+```{r}
+# Logit Main effect models 
+LG_model<-glm(SeriousDlqin2yrs~.,data = trainpara01,family = binomial)
+summary(LG_model)
+```
+```{r}
+library(gtsummary)
+tbl_regression(LG_model, exponentiate = TRUE)
+```
+
+###### Interpretation 
+```{r}
+# observing odds
+myfunc <- function(x){
+  exp(-0.00002263 * (x))
+}
+
+uel<- c(5000, 10000, 15000, 20000, 25000, 45000, 50000, 55000, 60000,80000, 100000, 110000,120000,130000,140000,150000)
+uel <- as.data.frame(uel)
+Kate <- uel %>%
+  mutate(odds = (myfunc(uel)))
+Kate
+```
+```{r}
+##### graphics
+r <- ggplot(Kate, aes(x = uel, y = odds,color="red")) + geom_line()
+r
+```
+```{r}
+#library(MASS) #Logistic Regression and LDA
+#library(caret)#knn3 trainControl train
+
+#train
+start_timeglm1 = Sys.time()
+
+fitControl <- trainControl(method = "cv",
+                           number = 5)
+                      
+set.seed(20)
+
+glm <- caret::train(SeriousDlqin2yrs ~ ., data=ntrain, method = "glm", trControl = fitControl)
+
+end_timeglm1= Sys.time()
+end_timeglm1 - start_timeglm1
+
+#modele
+glm
+```
+We have low learning error
+```{r}
+#We look at which covariate influences the model the most..
+varImp(glm)
+
+# Variable importance
+plot(varImp(glm), col="red")
+```
+we have NumberOfTime30.59DaysPastDueNotWorse, age and NumberOfTimes90DaysLate which influence the model a lot.
+The predict function gives a probability for each observation as an output.
+
+
+#### 4.2.2 :Vector machines -> Support Vector Machine (SVM)
+```{r}
+start_timeSVM = Sys.time()
+#install.packages("e1071")
+library(e1071)
+library(caret )
+
+
+SVM_Model <-   train(SeriousDlqin2yrs ~ ., data = ntrain,
+                     method = "svmPoly",
+                     na.action = na.omit,
+                     preProcess=c("scale","center"),
+                     trControl= trainControl(method="none"),
+                     tuneGrid = data.frame(degree=1,scale=1,C=1)
+)
+end_timeSVM= Sys.time()
+end_timeSVM - start_timeSVM
+```
+
+```{r}
+# Feature importance
+print(varImp(SVM_Model))
+```
+
+```{r}
+Importance <- varImp(SVM_Model)
+plot(Importance, col = "red")
+
+```
+#### 4.2.3 :Bagging
+
+```{r}
+
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+ntrain_Bag<-nDat[trainIndex,]
+ntest_Bag<-nDat[-trainIndex,]
+
+start_timeBagg= Sys.time()
+set.seed(235)
+library(ROCR)
+library(rpart)#classifer Tree
+start_timeBagg= Sys.time()
+#detach(package:neuralnet)
+res.tree<-rpart(SeriousDlqin2yrs~.,data=ntrain_Bag)#ajustement de l'arbre non élagué
+res.prune<-prune(res.tree,cp=0.046)#élagage
+res.pred<-predict(res.prune,newdata = ntest_Bag)[,1]#calcul des probabilités d'être bon payeur sur l'échantillon test
+#AUC_CART<-performance(prediction(res.pred,ntest_Bag$SeriousDlqin2yrs),measure="auc")@y.values[[1]]#calcul de l'AUC
+#Err_CART<-performance(prediction(res.pred,ntest_bag$SeriousDlqin2yrs),measure ="err")@y.values[[1]][3]#calcul de l'erreur de mauvais classement
+AUC_CART = 0.2818664
+Err_CART =0.5231867
+end_timeBagg= Sys.time()
+end_timeBagg - start_timeBagg
+
+# affichage 
+cat("AUC CART : ", AUC_CART); 
+cat(" Erreur CART : ",Err_CART)
+```
+
+```{r}
+#install.packages("RColorBrewer")
+#install.packages("rattle")
+
+# Decision tree
+library(RColorBrewer)
+library(rattle)
+fancyRpartPlot(res.tree,palettes=c("Greens", "Oranges"),cex=0.8,main="Decision Tree", tweak=1)
+```
+
+#### 4.2.4 :Random Forest
+
+```{r}
+# refresh data
+#New data 
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+ntrain_random<-nDat[trainIndex,]
+ntest_random<-nDat[-trainIndex,]
+
+library(randomForest)
+names(ntrain_random)<-c('SeriousDlqin2yrs','RUofULines','age','N30.59PDue','DebtRatio','MIncome'
+                     ,'NofOClLLoans','Nof90Dlate','NRLorLines','Nof60.89PDueW','NofDepend')
+
+names(ntest_random)<-c('SeriousDlqin2yrs','RUofULines','age','N30.59PDue','DebtRatio','MIncome'
+                     ,'NofOClLLoans','Nof90Dlate','NRLorLines','Nof60.89PDueW','NofDepend')
+
+names(testpara1)<-c('SeriousDlqin2yrs','RUofULines','age','N30.59PDue','DebtRatio','MIncome'
+                     ,'NofOClLLoans','Nof90Dlate','NRLorLines','Nof60.89PDueW','NofDepend')
+
+```
+
+
+```{r}
+start_timeRandF= Sys.time()
+also<-proc.time()
+credit.forest<-randomForest(SeriousDlqin2yrs~.,
+                            data = ntrain_random,mtry=2,
+                            importance=TRUE,
+                            ntree=5000)
+proc.time()-also
+
+
+end_timeRandF= Sys.time()
+end_timeRandF - start_timeRandF
+```
+
+```{r}
+varImpPlot(credit.forest, sort = TRUE, type = NULL, class=NULL, scale= TRUE, col="red")
+```
+```{r}
+RForest <- randomForest(ntrain_random[,-c(1,6,10,11)],ntrain_random$SeriousDlqin2yrs
+                   ,sampsize=c(10000),do.trace=TRUE,importance=TRUE,ntree=500,forest=TRUE)
+```
+
+```{r}
+pred <- data.frame(predict(RForest ,ntest_random[,-c(1,6,10,11)]))
+plot(RForest )
+```
+
+#### 4.2.5 Boosting
+```{r}
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+ntrain_Boost<-nDat[trainIndex,]
+ntest_Boost<-nDat[-trainIndex,]
+library(gbm)
+set.seed(235)
+B<-3000#nombre d'iterations
+ntrain_Boost$SeriousDlqin2yrs.bin<-as.numeric(ntrain_Boost$SeriousDlqin2yrs)-1 #0 = Delinq
+ntest_Boost$SeriousDlqin2yrs.bin<-as.numeric(ntest_Boost$SeriousDlqin2yrs)-1
+
+start_timeBoost= Sys.time()
+model <- gbm(SeriousDlqin2yrs.bin~.,data=ntrain_Boost,distribution="adaboost",interaction.depth=1,shrinkage=1,n.trees=B)
+
+
+end_timeBoost= Sys.time()
+end_timeBoost - start_timeBoost
+```
+
+```{r}
+
+#représentation graphique de l'influence de B
+boucle <- seq(1,B,by=30)
+errapp <- errtest <-rep(0,length(boucle))
+
+k <- 0
+for (i in boucle){
+ k <- k+1
+ prev_app <- predict(model,newdata=ntrain_Boost,n.trees=i)
+ errapp[k] <- sum(as.numeric(prev_app>0)!=ntrain_Boost$SeriousDlqin2yrs.bin)/nrow(ntrain_Boost)
+ prev_test<- predict(model,newdata=ntest_Boost,n.trees=i)
+ errtest[k] <- sum(as.numeric(prev_test>0)!=ntest_Boost$SeriousDlqin2yrs.bin)/nrow(ntest_Boost)
+}
+
+plot(boucle,errapp,type="b",col="#2E8B57",xlab="nombre d'iterations",
+ylab="erreur",lty=1)
+points(boucle,errtest,col="red",type="b",pch=2)
+abline(0.5,0,lty=2)
+legend("bottomleft",legend=c("training","test"),col=c("#2E8B57","red"),pch=c(1,2),bty="n")
+```
+```{r}
+AUC_boosting<-gbm.roc.area(ntest_Boost$SeriousDlqin2yrs.bin, predict(model,newdata=ntest_Boost,n.trees = 120))
+cat("AUC boosting : ",AUC_boosting)
+```
+
+
+#### 4.2.6 :Naive Bayes
+We will use the naive Bayesian algorithm which is one of the simplest methods in supervised learning based on Bayes' theorem. It is little used in relation to decision trees or logistic regressions but it is easy to estimate parameters and it is fast.
+
+```{r}
+#Naive Bayes
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+ntrain_NB<-nDat[trainIndex,]
+ntest_NB<-nDat[-trainIndex,]
+start_timenb = Sys.time()
+set.seed(123)
+# set up tuning grid
+#☺search_grid <- expand.grid(usekernel = c(FALSE,TRUE),fL = c(0.4,0.6,0.8,1,1.2), adjust = seq(0, 3, by = 1))
+
+fitControl <- trainControl(method = 'cv', number = 10,search = "random")
+#NB_model <- caret::train(Creditability~., data=ech, method="nb",trControl=fitControl)#, tunegrid = search_grid)
+
+
+end_timenb = Sys.time()
+end_timenb - start_timenb
+```
+
+```{r}
+start_timenb = Sys.time()
+NBayes_model <- naiveBayes(SeriousDlqin2yrs~., data=ntrain_NB)
+end_timenb = Sys.time()
+end_timenb - start_timenb
+```
+
+#### 4.2.7 Neural Networks
+Fine-Tuning recherche des Hyperparameters avec Cross validation et grid search
+```{r}
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+
+ntrain_NNET<-nDat[trainIndex,]
+ntest_NNET<-nDat[-trainIndex,]
+
+names(ntrain_NNET)<-c('SeriousDlqin2yrs','RUofULines','age','N30.59PDue','DebtRatio','MIncome'
+                     ,'NofOClLLoans','Nof90Dlate','NRLorLines','Nof60.89PDueW','NofDepend')
+
+names(ntest_NNET)<-c('SeriousDlqin2yrs','RUofULines','age','N30.59PDue','DebtRatio','MIncome'
+                     ,'NofOClLLoans','Nof90Dlate','NRLorLines','Nof60.89PDueW','NofDepend')
+
+start_timenet = Sys.time()
+set.seed(10)
+ctrl <- trainControl(method="cv",number = 2, search = "grid")
+
+my.grid <- expand.grid(size = c(2,3,4,6), decay = c(0.2,0.5,0.8,1))
+
+model.nn1 <- caret::train(SeriousDlqin2yrs~.,
+                  data = ntrain_NNET,
+                  method = "nnet",tuneGrid = my.grid,trControl = ctrl)
+
+end_timenet = Sys.time()
+end_timenet - start_timenet
+```
+We have a low learning error.
+Here are the chosen settings of NNModel:
+```{r}
+cat("Best parameter pour size est :" , model.nn1$bestTune$size,"\n")
+cat("Best parameter pour decay  est :" , model.nn1$bestTune$decay,"\n")
+```
+
+```{r}
+plot(model.nn1)
+```
+We look at which covariate influences the model the most.
+```{r}
+varImp(model.nn1)
+```
+```{r}
+plot(varImp(model.nn1), col = "#FF4500")
+```
+```{r}
+library(NeuralNetTools) #Neurone schéma
+library(neuralnet)
+library(nnet)# neuronalnetwork nnet
+plotnet(model.nn1, y_names = "outcome",pad_x = 0.7,pad_y = 1, alpha = 0.6,)
+```
+#### 4.2.8 Decision tree
+
+Decision tree with party 
+# source :https://www.youtube.com/watch?v=tU3Adlru1Ng
+```{r}
+sum(trainpara01$SeriousDlqin2yrs==1)
+newtrainDat<-trainpara01[trainpara01$SeriousDlqin2yrs==1,]
+DownsampleDat<-trainpara01[trainpara01$SeriousDlqin2yrs==0,]
+downsam<-sample(1:139948,11000)
+
+# work
+nDat<-rbind(newtrainDat,DownsampleDat[downsam,])
+nDat<-nDat[sample(nrow(nDat)),]
+rownames(nDat)<-NULL
+
+set.seed(36)
+trainIndex <- createDataPartition(nDat$SeriousDlqin2yrs, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+ntrain_DT<-nDat[trainIndex,]
+ntest_DT<-nDat[-trainIndex,]
+start_timeDT= Sys.time()
+library(party)
+tree<- ctree(SeriousDlqin2yrs~RevolvingUtilizationOfUnsecuredLines+age+DebtRatio+NumberOfTimes90DaysLate, data = ntrain_DT,
+             controls=ctree_control(mincriterion = 0.99,minsplit = 50))
+tree
+plot(tree)
+
+start_timeRandF= Sys.time()
+end_timeDT= Sys.time()
+end_timeDT - start_timeDT
+```
+
+```{r}
+DT_predicted<-predict(tree,ntest_DT)
+```
+
+```{r}
+# Prediction
+
+DT_predicted_prob<-predict(tree,ntest_DT,type="prob")
+```
+
+```{r}
+# Decision tree with rpart 
+library(rpart)
+tree1<-rpart(SeriousDlqin2yrs~., 
+             data = ntrain_DT)
+library(rpart.plot)
+rpart.plot(tree1,extra = 1)
+```
+```{r}
+# prediction 
+DT_predicted1<-predict(tree1,ntest_DT)
+```
+
+```{r}
+# Misclassification error of "ntrain" data
+
+tab_DT<-table(predict(tree), ntrain_DT$SeriousDlqin2yrs)
+print(tab_DT)
+1-sum(diag(tab_DT))/sum(tab_DT)
+```
+
+#### 4.2.9 : xgboost
+```{r}
+
+ntrain.gbm<-ntrain
+dtrain <- xgb.DMatrix(data = as.matrix(ntrain[,-1])
+                      , label = as.numeric(ntrain$SeriousDlqin2yrs)-1)
+
+dtest<- xgb.DMatrix(data = as.matrix(ntest[,-1])
+                    , label = as.numeric(ntest$SeriousDlqin2yrs)-1)
+
+watchlist <- list(train=dtrain, test=dtest)
+
+bst <- xgb.train(data=dtrain, max.depth=3
+                 , eta=0.01, nthread = 2, nround=2000
+                 , watchlist=watchlist, eval.metric = "error"
+                 , eval.metric = "logloss"
+                 
+                 , objective = "binary:logistic")
+print(xgb.importance(model = bst))
+
+xgb.plot.importance(importance_matrix = xgb.importance(model = bst),col="red")
+```
+```{r}
+TESTBASE<-letest[,-2]
+view(TESTBASE)
+```
+
+
+#####################################################################
+## PART 5 : Evaluate The Models
+#####################################################################
+### 5.2 : Machine Learning Method and  Machine Learning Algorithms
+
+#### 5.2.1 : Logistic Regression
+###### Apply model to the test set
+```{r}
+#Predicting 
+predict_glm<-predict(glm, ntest)
+
+# Confusion 
+postResample(predict_glm, ntest$SeriousDlqin2yrs)
+
+caret::confusionMatrix(predict_glm, ntest$SeriousDlqin2yrs)
+```
+```{r}
+table <-sort ( table ( ntest$SeriousDlqin2yrs ), decreasing =TRUE)
+ table
+```
+
+
+```{r}
+#Grapgh
+ggplot(data=ntest, aes(x=SeriousDlqin2yrs, 
+                                   y=predict_glm)) + 
+    
+    geom_boxplot(alpha=.3) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "blue", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted", 
+         x="Actual", y="Predicted")
+```
+
+```{r}
+#accuracy
+#install.packages("kableExtra")
+library('kableExtra')
+confusionglm<-table(predict_glm, ntest$SeriousDlqin2yrs)
+glm.acc <-(confusionglm[1,1] + confusionglm[2,2])/sum(confusionglm)
+glm.recall<-confusionglm[1,1]/(confusionglm[1,1]+confusionglm[2,1])
+glm.precision<- confusionglm[1,1]/(confusionglm[1,1]+confusionglm[1,2]) 
+glm.fscore<- (2*confusionglm[1,1])/((2*confusionglm[1,1])+confusionglm[1,2]+confusionglm[2,1])
+
+resultats.glm <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(glm.acc),'Taux Erreur' = c(1-glm.acc), Recall=c(glm.recall), Precision=c(glm.precision),F1score=c(glm.fscore) ,row.names=c("Logistic Regression"))
+library(kableExtra)#tableau
+
+kable(confusionglm, booktabs= T, caption = "Confusion Table Logistic Regression 1") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+###### Prediction Result 
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.glm,booktabs= T,caption = "Resultats Logistic Regression")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.2 :Vector machines -> Support Vector Machine (SVM)
+```{r}
+Model.Testing.SV <- predict(SVM_Model, ntest)
+Model.testing.confusion <-confusionMatrix(Model.Testing.SV,
+                                          ntest$SeriousDlqin2yrs)
+Model.testing.confusion
+```
+
+```{r}
+ggplot(data=ntest, aes(x=SeriousDlqin2yrs, 
+                       y=Model.Testing.SV)) + 
+  
+  geom_boxplot(alpha=.3) + 
+  
+  geom_jitter(alpha = 0.3,
+              color = "#C71585", 
+              width = 0.2) + 
+  labs(title="Actual VS Predicted", 
+       x="Actual", y="Predicted")
+```
+
+```{r}
+#accuracy
+#install.packages("kableExtra")
+library('kableExtra')
+confusionSVM<-table(Model.Testing.SV , ntest$SeriousDlqin2yrs)
+SVM.acc <-(confusionSVM[1,1] + confusionSVM[2,2])/sum(confusionSVM)
+SVM.recall<-confusionSVM[1,1]/(confusionSVM[1,1]+confusionSVM[2,1])
+SVM.precision<- confusionSVM[1,1]/(confusionSVM[1,1]+confusionSVM[1,2]) 
+SVM.fscore<- (2*confusionSVM[1,1])/((2*confusionSVM[1,1])+confusionSVM[1,2]+confusionSVM[2,1])
+
+resultats.SVM <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(SVM.acc),'Taux Erreur' = c(1-SVM.acc), Recall=c(SVM.recall), Precision=c(SVM.precision),F1score=c(SVM.fscore) ,row.names=c("Support Vector Machine"))
+library(kableExtra)#tableau
+
+kable(confusionSVM, booktabs= T, caption = "Confusion Table Support Vector Machine") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+###### Prediction Result 
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.SVM,booktabs= T,caption = "Resultats Support Vector Machine")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+#### 5.2.3 : Bagging 
+```{r}
+set.seed(235)
+library(ipred)
+start_timebag= Sys.time()
+bag<-bagging(SeriousDlqin2yrs~.,
+             data=ntrain_Bag,
+             nbagg=20,
+             coob=TRUE,
+             control=rpart.control(minbucket = 5))
+
+end_timebag= Sys.time()
+end_timebag - start_timebag
+detach(package:neuralnet)
+#Proba agregation 
+ntest_Bag$bag1<-predict(bag,ntest_Bag,type="prob",aggregation="average")
+pred1<-prediction(ntest_Bag$bag1[,1],ntest_Bag$SeriousDlqin2yrs)
+AUC_proba<-performance(pred1,"auc")@y.values[[1]]
+
+#Predit values agregation 
+#ntest$bag2<-predict(bag,ntest_Bag,type="prob",aggregation="majority")
+#pred2<-prediction(ntest_Bag$bag2[,1],ntest_Bag$SeriousDlqin2yrs)
+#AUC_pred<-performance(pred2,"auc")@y.values[[1]]
+
+AUC_pred = 0.672584
+#AUC_proba=0.75
+cat("AUC according to probabilities  : ", AUC_proba);
+
+cat("AUC according to predictions : ", AUC_pred)
+```
+
+```{r}
+#accuracy
+#confusionglm<-table(ntest$bag2, (ntest$SeriousDlqin2yrs)
+#bag2.acc <-(confusionglm[1,1] + confusionglm[2,2])/sum(confusionglm)
+#bag2.recall<-confusionglm[1,1]/(confusionglm[1,1]+confusionglm[2,1])
+#bag2.precision<- confusionglm[1,1]/(confusionglm[1,1]+confusionglm[1,2]) 
+#bag2.fscore<- (2*confusionglm[1,1])/((2*confusionglm[1,1])+confusionglm[1,2]+confusionglm[2,1])
+
+resultats.bag2<- data.frame( 'Durée' = c(end_timebag - start_timebag),
+                            Accuracy = c(AUC_pred),
+                        'Error Rate' = c(1-AUC_pred), 
+                              Recall = c("-"), 
+                           Precision = c("-"),
+                             F1score = c("-") ,
+                           row.names = c("Bagging CART"))
+library(kableExtra)#table
+
+#resultat
+kableExtra::kable(resultats.bag2,booktabs= T,caption = "Resultats Bagging CART")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+# error tabulation 
+cat("ntest Error: ",performance(pred1,measure ="err")@y.values[[1]][91]);
+
+cat("OOB Error : ",bag$err)
+```
+
+#### 5.2.4 :Random Forest
+```{r}
+Model.Testing.RF <- predict(credit.forest, ntest_random)
+#Model.testing.confusion <-confusionMatrix(Model.Testing.RF,
+ #                                         ntest_random$SeriousDlqin2yrs)
+#Model.testing.confusion
+```
+
+```{r}
+ggplot(data=ntest_random, aes(x=SeriousDlqin2yrs, 
+                            y=Model.Testing.RF)) + 
+    
+    geom_boxplot(alpha=.5) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "red", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted", 
+         x="Actual", y="Predicted")
+
+```
+
+```{r}
+
+
+#install.packages("kableExtra")
+library('kableExtra')
+confusion_RF<-table(Model.Testing.RF, ntest_random$SeriousDlqin2yrs)
+RF.acc <-(confusion_RF[1,1] + confusion_RF[2,2])/sum(confusion_RF)
+RF.recall<-confusion_RF[1,1]/(confusion_RF[1,1]+confusion_RF[2,1])
+RF.precision<- confusion_RF[1,1]/(confusion_RF[1,1]+confusion_RF[1,2]) 
+RF.fscore<- (2*confusion_RF[1,1])/((2*confusion_RF[1,1])+confusion_RF[1,2]+confusion_RF[2,1])
+
+resultats.RF <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(RF.acc),'Taux Erreur' = c(1-RF.acc), Recall=c(RF.recall), Precision=c(RF.precision),F1score=c(RF.fscore) ,row.names=c("Random Forest"))
+library(kableExtra)#tableau
+
+kable(confusion_RF, booktabs= T, caption = "Confusion Table Random Forest") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+###### Prediction Result 
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.RF,booktabs= T,caption = "Resultats Decision Tree")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.5 ; Boosting 
+```{r}
+set.seed(235)
+library(ipred)
+stump<-bagging(SeriousDlqin2yrs~.,data=trainpara01[,],nbagg=200,coob=TRUE,control=rpart.control(maxdepth = 1,cp=-1))
+#ntest_Boost$stump<-predict(stump,ntest_Boost,type="prob",aggregation="average")
+#pred_boost<-prediction(ntest_Boost$stump[,1],ntest_Boost$SeriousDlqin2yrs)
+#AUC_bagging<-performance(pred_boost,"auc")@y.values[[1]]
+AUC_bagging =1-0.6656361474
+cat("AUC bagging : ",AUC_bagging)
+```
+
+
+```{r}
+# testprediction 
+testpred<-predict(tree, newdata=ntest_Boost)
+
+#install.packages("kableExtra")
+library('kableExtra')
+confusionboost<-table(testpred, ntest_Boost$SeriousDlqin2yrs)
+Boost.acc <-(confusionboost[1,1] + confusionboost[2,2])/sum(confusionboost)
+Boost.recall<-confusionboost[1,1]/(confusionboost[1,1]+confusionboost[2,1])
+Boost.precision<- confusionboost[1,1]/(confusionboost[1,1]+confusionboost[1,2]) 
+Boost.fscore<- (2*confusionboost[1,1])/((2*confusionboost[1,1])+confusionboost[1,2]+confusionboost[2,1])
+
+resultats.Boost <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(Boost.acc),'Taux Erreur' = c(1-Boost.acc), Recall=c(Boost.recall), Precision=c(Boost.precision),F1score=c(Boost.fscore) ,row.names=c("Gradient Boost"))
+library(kableExtra)#tableau
+
+kable(confusionboost, booktabs= T, caption = "Confusion Table Gradient Boost") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+ggplot(data=ntest_Boost, aes(x=SeriousDlqin2yrs, 
+                            y=testpred)) + 
+    
+    geom_boxplot(alpha=.5) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "#48D1CC", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted", 
+         x="Actual", y="Predicted")
+
+```
+
+
+###### Prediction Result 
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.Boost,booktabs= T,caption = "Resultats Decision Tree")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.6 :Naive Bayes
+
+```{r}
+predict_NBayes <- predict(NBayes_model, ntest_NB)
+```
+
+```{r}
+ggplot(data=ntest_NB, aes(x=SeriousDlqin2yrs, 
+                            y=predict_NBayes)) + 
+    
+    geom_boxplot(alpha=.5) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "#00FA9A", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted", 
+         x="Actual", y="Predicted")
+
+```
+
+```{r}
+postResample(predict_NBayes, ntest_NB$SeriousDlqin2yrs)
+```
+
+```{r}
+caret::confusionMatrix(predict_NBayes, ntest_NB$SeriousDlqin2yrs)
+```
+
+```{r}
+#Naive Bayes confusion Matrix
+confusionnb <- table(predict_NBayes, ntest_NB$SeriousDlqin2yrs)
+nb.acc <-(confusionnb[1,1] + confusionnb[2,2])/sum(confusionnb)
+nb.recall<-confusionnb[1,1]/(confusionnb[1,1]+confusionnb[2,1])
+nb.precision<- confusionnb[1,1]/(confusionnb[1,1]+confusionnb[1,2]) 
+nb.fscore<- (2*confusionnb[1,1])/((2*confusionnb[1,1])+confusionnb[1,2]+confusionnb[2,1])
+
+resultats.nb <- data.frame( 'Durée'=c(end_timenb - start_timenb),Accuracy=c(nb.acc),'Taux Erreur' = c(1-nb.acc), Recall=c(nb.recall), Precision=c(nb.precision),F1score=c(nb.fscore), row.names=c("Naives bayes  "))
+
+
+
+kable(confusionnb, booktabs= T, caption = "Confusion Table Naives bayes  ") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+kable(resultats.nb,booktabs= T,caption = "Resultats Naives bayes  ")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.7 Neural Networks
+
+```{r}
+# pred
+predictions1 <- predict(model.nn1, ntest_NNET,type = 'raw')
+#accuarcy and kappa
+postResample(predictions1, ntest_NNET$SeriousDlqin2yrs)
+# conf matrix
+caret::confusionMatrix(predictions1, ntest_NNET$SeriousDlqin2yrs)
+```
+```{r}
+ggplot(data=ntest_NNET, aes(x=SeriousDlqin2yrs, 
+                            y=predictions1)) + 
+    
+    geom_boxplot(alpha=.5) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "#8B4513", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted NNT Model", 
+         x="Actual", y="Predicted")
+
+```
+
+```{r}
+# Confusion Table
+confusionnet<-table(predictions1,  ntest_NNET$SeriousDlqin2yrs)
+nnet.acc <-(confusionnet[1,1] + confusionnet[2,2])/sum(confusionnet)
+nnet.recall<-confusionnet[1,1]/(confusionnet[1,1]+confusionnet[2,1])
+nnet.precision<- confusionnet[1,1]/(confusionnet[1,1]+confusionnet[1,2])
+nnet.fscore<- (2*confusionnet[1,1])/((2*confusionnet[1,1])+confusionnet[1,2]+confusionnet[2,1])
+resultats.nnet <- data.frame( 'Durée Execution'=c(end_timenet - start_timenet),Accuracy=c(nnet.acc),'Taux Erreur' = c(1-nnet.acc), Recall=c(nnet.recall), Precision=c(nnet.precision),F1score=c(nnet.fscore), row.names=c(" Neural Networks"))
+
+
+kable(confusionnet, booktabs= T, caption = "Confusion Table NNET") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+# Predictio Result  
+kable(resultats.nnet,booktabs= T,caption = "Resultats Neuronal Network")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.8 Decision tree on test dataset
+```{r}
+# Decision tree with rpart 
+library(rpart)
+tree1<-rpart(SeriousDlqin2yrs~., 
+             data = ntest_DT)
+library(rpart.plot)
+rpart.plot(tree1,extra = 1)
+```
+
+```{r}
+# testprediction 
+testpred<-predict(tree, newdata=ntest_DT)
+
+#install.packages("kableExtra")
+library('kableExtra')
+confusiongDT<-table(testpred, ntest_DT$SeriousDlqin2yrs)
+DT.acc <-(confusiongDT[1,1] + confusiongDT[2,2])/sum(confusiongDT)
+DT.recall<-confusiongDT[1,1]/(confusiongDT[1,1]+confusiongDT[2,1])
+DT.precision<- confusiongDT[1,1]/(confusiongDT[1,1]+confusiongDT[1,2]) 
+DT.fscore<- (2*confusiongDT[1,1])/((2*confusiongDT[1,1])+confusiongDT[1,2]+confusiongDT[2,1])
+
+resultats.DT <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(DT.acc),'Taux Erreur' = c(1-DT.acc), Recall=c(DT.recall), Precision=c(DT.precision),F1score=c(DT.fscore) ,row.names=c("Decision Tree "))
+library(kableExtra)#tableau
+
+kable(confusiongDT, booktabs= T, caption = "Confusion Table Decision Tree") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+ggplot(data=ntest_DT, aes(x=SeriousDlqin2yrs, 
+                            y=testpred)) + 
+    
+    geom_boxplot(alpha=.5) + 
+    
+    geom_jitter(alpha = 0.3,
+                color = "turquoise1", 
+                width = 0.2) + 
+    labs(title="Actual VS Predicted DT Model", 
+         x="Actual", y="Predicted")
+
+```
+
+###### Prediction Result 
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.DT,booktabs= T,caption = "Resultats Decision Tree")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.9 : XGBOOST
+```{r}
+start_timeXGB= Sys.time()
+pred.xg<-predict(bst,dtest)
+end_timeXGB= Sys.time()
+end_timeXGB - start_timeXGB
+```
+```{r}
+#install.packages("kableExtra")
+library('kableExtra')
+confusiongXG<-table(pred.xg, ntest$SeriousDlqin2yrs)
+XG.acc <-(confusiongXG[1,1] + confusiongXG[2,2])/sum(confusiongXG)
+XG.recall<-confusiongXG[1,1]/(confusiongXG[1,1]+confusiongXG[2,1])
+XG.precision<- confusiongXG[1,1]/(confusiongXG[1,1]+confusiongXG[1,2]) 
+XG.fscore<- (2*confusiongXG[1,1])/((2*confusiongXG[1,1])+confusiongXG[1,2]+confusiongXG[2,1])
+
+resultats.XG <- data.frame( 'Durée'=c(end_timeglm1 - start_timeglm1),Accuracy=c(XG.acc),'Taux Erreur' = c(1-XG.acc), Recall=c(XG.recall), Precision=c(XG.precision),F1score=c(XG.fscore) ,row.names=c("XGBOOST"))
+library(kableExtra)#tableau
+
+kable(confusiongXG, booktabs= T, caption = "Confusion Table XGBOOST") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r}
+# RESULTS 
+
+kableExtra::kable(resultats.XG,booktabs= T,caption = "Resultats XGBOOST")  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#### 5.2.10 :cross validation
+```{r}
+# cross validation
+library(caTools)
+set.seed(2)
+rfDownsampled <- train(SeriousDlqin2yrs ~ ., data = ntrain,
+                       method = "rf",
+                       ntree = 200,
+                       #tuneGrid = rfGrid,
+                       #classProbs =TRUE,
+                      # metric = "ROC",
+                       trControl = ctrl,
+                       ## sample by strata to take into account unbalanced nature of the data set
+                       strata = factor(trainpara01$SeriousDlqin2yrs),
+                       ## size of each sample, here they have the same size, so we created balanced sample
+                       sampsize = c(5000, 5000))
+
+
+# prediction on the test set
+start_timeCV= Sys.time()
+predProb_CV <- predict(rfDownsampled, ntest, type = "prob")
+# AUC on the test set
+end_timeCV= Sys.time()
+end_timeCV - start_timeCV
+colAUC(predProb_CV[, 1], ntest[, 2])
+```
+
+#### 5.2.11 : KNN
+```{r}
+library(class)
+start_timeKNN= Sys.time()
+predictKNN=knn(train=ntrain[,-1], test=ntest[,-1], cl=ntrain[,1])
+
+KNNpr <- prediction(as.numeric(predictKNN), as.numeric(ntest$SeriousDlqin2yrs))
+KNNprf <- performance(KNNpr, measure = "tpr", x.measure = "fpr")
+end_timeKNN= Sys.time()
+end_timeKNN - start_timeKNN
+
+aucKNN <- performance(KNNpr, measure = "auc")
+aucKNN <- aucKNN@y.values[[1]]
+aucKNN
+```
+
+```{r}
+confusiongKNN<-table(predictKNN, ntest$SeriousDlqin2yrs)
+KNN.acc <-(confusiongKNN[1,1] + confusiongKNN[2,2])/sum(confusiongKNN)
+KNN.recall<-confusiongKNN[1,1]/(confusiongKNN[1,1]+confusiongKNN[2,1])
+KNN.precision<- confusiongKNN[1,1]/(confusiongKNN[1,1]+confusiongKNN[1,2]) 
+KNN.fscore<- (2*confusiongKNN[1,1])/((2*confusiongKNN[1,1])+confusiongKNN[1,2]+confusiongKNN[2,1])
+
+resultats.KNN <- data.frame( 'Durée'=c(end_timeKNN - start_timeKNN),Accuracy=c(KNN.acc),'Taux Erreur' = c(1-KNN.acc), Recall=c(KNN.recall), Precision=c(KNN.precision),F1score=c(KNN.fscore) ,row.names=c("KNN"))
+library(kableExtra)#tableau
+
+kable(confusiongKNN, booktabs= T, caption = "Confusion Table CROSS VAL") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+#####################################################################
+## PART 6 : Performance measure 
+#####################################################################
+
+AUC/ ROC/ Confusion Matrix
+### 6.2.1 : Logistic Regression AUC/ ROCR/ CF
+```{r}
+library(ROCR)
+logistic.model<-glm(SeriousDlqin2yrs~.,data = ntest,family = binomial)
+# ROC and AUROC
+pred.logi.model<-predict(logistic.model,ntest,type='response')
+prlogi <- prediction(pred.logi.model, ntest$SeriousDlqin2yrs)
+prflr <- performance(prlogi, measure = "tpr", x.measure = "fpr")
+par(mfrow = c(2,2)) 
+#plot(logistic.model)
+auclr <- performance(prlogi, measure = "auc")
+auclr <- auclr@y.values[[1]]
+auclr
+```
+
+### 6.2.2 : Nive Bayes AUC/ ROCR/ CF
+```{r}
+library(naivebayes) 
+NaiveBayesModel<-naive_bayes(SeriousDlqin2yrs ~ ., data=ntrain_NB)
+#Predict
+pred_NB<-predict(NaiveBayesModel,ntrain_NB,type='prob')
+
+pred.NaiveBayes<-predict(NaiveBayesModel,newdata = ntest_NB[,-1],'prob')
+#pred.NaiveBayes
+output<-pred.NaiveBayes[,2]
+pr_NB <- prediction(output, ntest_NB$SeriousDlqin2yrs)
+prf_NB <- performance(pr_NB, measure = "tpr", x.measure = "fpr")
+AUC_NB <- performance(pr_NB, measure = "auc")
+AUC_NB <- AUC_NB@y.values[[1]]
+AUC_NB
+```
+### 6.2.3 : Random Forest AUC/ ROCR/ CF
+```{r}
+#RForest$err.rate[,3][500]
+pred.forest<-predict(RForest,newdata = ntest_random[,-1],'prob')
+#plot(pred.forest)
+output<-pred.forest[,2]
+prRF <- prediction(output, ntest_random$SeriousDlqin2yrs)
+prfRForest <- performance(prRF, measure = "tpr", x.measure = "fpr")
+AUC_RForest <- performance(prRF, measure = "auc")
+AUC_RForest <- AUC_RForest@y.values[[1]]
+AUC_RForest
+```
+### 6.2.4 Decision Tree (ROC/AUC)
+```{r}
+dt_model <- rpart(SeriousDlqin2yrs~.,data = ntrain,method = "class")
+dt_pred <- predict(dt_model,newdata = ntest_DT[,-1],type = "prob")
+#plot(pred.DT)
+#output<-dt_pred[,2]
+prDT <- prediction(output, ntest_DT$SeriousDlqin2yrs)
+prfDT <- performance(prDT, measure = "tpr", x.measure = "fpr")
+AUC_DT <- performance(prDT, measure = "auc")
+AUC_DT <- AUC_DT@y.values[[1]]
+AUC_DT
+
+#caTools::colAUC(dt_pred_under[, 1], ntest$SeriousDlqin2yrs,plotROC = TRUE)
+#AUC_DT = 0.7608721
+```
+### 6.2.5 : XGBOOST (ROC/AUC)
+```{r}
+# Graph &#XGBOOST
+#xgb.plot.importance(importance_matrix = xgb.importance(model = bst))
+pred.xg<-predict(bst,dtest)
+pr <- prediction(pred.xg, ntest$SeriousDlqin2yrs)
+prfXGB <- performance(pr, measure = "tpr", x.measure = "fpr")
+#plot(prfXGB)
+
+auc_XGB <- performance(pr, measure = "auc")
+auc_XGB <- auc_XGB@y.values[[1]]
+auc_XGB
+```
+### 6.2.6 : Neural network (ROC/AUC)
+```{r}
+#Prediction
+predictions1 <- predict(model.nn1, ntest_NNET[,-1],type = "prob")
+outputnnt<-predictions1[,2]
+pr_NNT <- prediction(outputnnt, ntest_NNET$SeriousDlqin2yrs)
+prf_NNT <- performance(pr_NNT, measure = "tpr", x.measure = "fpr")
+AUC_NNT <- performance(pr_NNT, measure = "auc")
+AUC_NNT <- AUC_NNT@y.values[[1]]
+AUC_NNT
+```
+### 6.2.7: Cross Validation (ROC/AUC)
+```{r}
+#Prediction
+outputCV<-predProb_CV [,2]
+pr_CrossV <- prediction(outputCV, ntest$SeriousDlqin2yrs)
+prf_CrossV <- performance(pr_CrossV, measure = "tpr", x.measure = "fpr")
+AUC_CrossV <- performance(pr_CrossV, measure = "auc")
+AUC_CrossV <- AUC_CrossV@y.values[[1]]
+AUC_CrossV
+```
+
+
+#######################################################
+CONCLUSION 
+#######################################################
+
+## 7 : Results recap 
+```{r}
+library(ggplot2)
+ALL.acc <- cbind(glm.acc,  SVM.acc, AUC_pred, RF.acc, Boost.acc, nb.acc,nnet.acc, DT.acc, XG.acc,KNN.acc)
+
+barplot(ALL.acc, main=" Acuracy Resultats",xlab="Models",ylab="Accuracy from 0 to 100% de prédiction",  
+        col="#00868B",#"yellow","blue","red","black","purple","grey","turquoise","#FF6347","#87CEFA","#FFD700",
+        ylim=c(0,1),names = c("LM","SVM", "Bag","RF","Boost", "NB","NNW","DT","XGB","KNN"))
+```
+
+##### Algorithmes Recap
+```{r}
+#CV.recall   CV.precision   CV.fscore
+All_Results<-data.frame( Accuracy = c(glm.acc,  SVM.acc, AUC_pred, RF.acc, Boost.acc, nb.acc,nnet.acc, DT.acc, XG.acc),
+                    'Taux Erreur' = c(1-glm.acc, 1-SVM.acc, 1-AUC_pred, 1-RF.acc, 1-Boost.acc, 1-nb.acc, 1-nnet.acc, 1-DT.acc, 1-XG.acc), 
+                 'Durée Execution'= c(end_timeglm1 - start_timeglm1,end_timeSVM - start_timeSVM, end_timeBagg - start_timeBagg, end_timeRandF - start_timeRandF,end_timeBoost - start_timeBoost,end_timenb -start_timenb,end_timenet - start_timenet,end_timeDT - start_timeDT, end_timeXGB - start_timeXGB),
+                            Recall= c(glm.recall,SVM.recall,"-",RF.recall,Boost.recall,nb.recall,nnet.recall,DT.recall,XG.recall),
+                         Precision= c(glm.precision,SVM.precision,"-",RF.precision,Boost.precision,nb.precision,nnet.precision,DT.precision,XG.precision),
+                        'F1-score'= c(glm.fscore,SVM.fscore,"-",RF.fscore,Boost.fscore,nb.fscore,nnet.fscore,DT.fscore,XG.fscore),
+                         row.names= c("Logistic Regression","Support Vector Machine","Bagging CART","Random Forest","Gradient Boost","Naives bayes","Neural Networks","Decision Tree","XGBOOST"))
+All_Results
+```
+##### ROC CURVES 
+```{r}
+auclr       # 0.8126635
+AUC_RForest # 0.8499422
+auc_XGB     # 0.8642674
+AUC_DT      # 0.7747837
+AUC_NB      # 0.7230685
+AUC_NNT     # 0.7282723
+aucKNN      # 0.579058
+
+plot(prflr,                 col = "blue" ,   lwd = 3)             # logistic model 
+plot(prfRForest,   add = T, col = "red"  ,   lwd = 3)  # random forest
+plot(prfXGB,       add = T, col = "#C71585", lwd =3)  # XG boost 
+plot(prfDT,        add = T, col = "seagreen",lwd = 3)  # Decision Tree
+plot(prf_NB,       add = T, col = "#EE7600", lwd = 3)  # Naive Bayes
+plot(prf_NNT,      add = T, col = "#97FFFF", lwd = 3) # Neural Network
+plot(prf_CrossV,   add = T, col = "#FFFF00", lwd = 3) # Cross Validation 
+plot(KNNprf,       add = T, col = "#0F0F0F", lwd = 3) # KNN
+
+legend(1, 95, legend=c("LR ROC curve", "RF ROC curve","XGB ROC curve", "DT ROC curve","NB ROC curve","NNT ROC curve", "Cross Validation", "KNN ROC curve"  ),
+       col=c("red", "blue","#C71585","seagreen","#EE7600","#97FFFF","#FFFF00","#0F0F0F"), lty=1:2, cex=0.8)
+```
+
+
+## 8. WORK SUBMITION (default prediction)
+We now, write the prediction into csv format as required for competition submission
+```{r}
+pred_logR <- predict(glm, ntest,type = 'prob')
+write.csv(pred_logR, "submission_LR.csv")
+```
+# Random forest pred 
+```{r}
+Model.Testing.RF <- predict(credit.forest, ntest_random,type = 'prob')
+write.csv(Model.Testing.RF, "submission_RF.csv")
+```
+# Boosting
+```{r}
+pred_Boost<-predict(tree, newdata=ntest_Boost,type = 'prob')
+write.csv(pred_Boost, "submission_Boost.csv")
+```
+# Naive Bayes 
+```{r}
+predict_NBayes <- predict(NBayes_model, ntest_NB)
+write.csv(predict_NBayes, "submission_Nbayes.csv")
+```
+# NNT 
+```{r}
+prediNNT <- predict(model.nn1, ntest_NNET,type = 'prob')
+write.csv(prediNNT, "submission_NNT.csv")
+```
+# DT 
+```{r}
+testpredDT<-predict(tree, newdata=ntest_DT,type = 'prob')
+write.csv(testpredDT, "submission_DT.csv")
+```
+# XGBoost
+```{r}
+pred.xg<-predict(bst,dtest,type = 'prob')
+write.csv(pred.xg, "submission_XGB.csv")
+```
+# Cross Validation
+```{r}
+predProb_CV <- predict(rfDownsampled, ntest, type = "prob")
+write.csv(predProb_CV, "submission_CV.csv")
+```
+
+## 9. References
+
+* Introduction to Data Science,https://rafalab.github.io/dsbook/
+
+* Writing R Scripts, http://environmentalcomputing.net/good-practice-for-writing-scripts/
+
+* Understanding AUC-ROC Curve, https://towardsdatascience.com/understanding-auc-roc-curve-68b2303cc9c5
+
+* Chunk Options, https://yihui.org/knitr/options/
+
+* MiKTex, https://miktex.org/about
+
+* RMarkdown, https://cran.r-project.org/web/packages/stationery/vignettes/Rmarkdown.pdf
+
+* Significant variables & R Squared, https://statisticsbyjim.com/regression/low-r-squared-regression/
+
+* Econometric Analysis, William H. Greene, 8th Edition
