@@ -15,7 +15,7 @@ The main purpose is to develop knowledge about the predictive performance of dif
 learning algorithms when used to predict defaults in loans. This is done by implementing
 different machine learning algorithms (statistical methods) which can be used to classify
 samples. These different algorithms will be used to predict the defaults on loans. The loans
-come from two data sets with loans of which it is known whether or not they went into default
+come from two data sets with loans of which it is known whether or not they went into default.
 
 Our learning methods used are Logistic Regression, Support Vector
 Machine (SVM), Bagging, Random Forest, Boosting, Naive Bayes, Neural Networks, Decision
